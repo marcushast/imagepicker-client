@@ -249,6 +249,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       case LogicalKeyboardKey.arrowRight:
         _nextImage();
         break;
+      case LogicalKeyboardKey.arrowUp:
+        _pickImageWithoutAdvance();
+        break;
+      case LogicalKeyboardKey.arrowDown:
+        _rejectImageWithoutAdvance();
+        break;
       case LogicalKeyboardKey.keyP:
         _pickImage();
         break;
@@ -325,6 +331,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     }
   }
 
+  void _pickImageWithoutAdvance() {
+    setState(() {
+      _images[_currentIndex].status = ImageStatus.pick;
+    });
+  }
+
   void _rejectImage() {
     setState(() {
       _images[_currentIndex].status = ImageStatus.reject;
@@ -332,6 +344,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     if (_currentIndex < _images.length - 1) {
       _nextImage();
     }
+  }
+
+  void _rejectImageWithoutAdvance() {
+    setState(() {
+      _images[_currentIndex].status = ImageStatus.reject;
+    });
   }
 
   void _clearStatus() {
@@ -351,9 +369,13 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
           children: [
             Text('← / → : Navigate between images', style: TextStyle(fontSize: 16)),
             SizedBox(height: 8),
-            Text('P : Mark as Pick', style: TextStyle(fontSize: 16)),
+            Text('↑ : Mark as Pick (stay on image)', style: TextStyle(fontSize: 16)),
             SizedBox(height: 8),
-            Text('X : Mark as Reject', style: TextStyle(fontSize: 16)),
+            Text('↓ : Mark as Reject (stay on image)', style: TextStyle(fontSize: 16)),
+            SizedBox(height: 8),
+            Text('P : Mark as Pick (advance to next)', style: TextStyle(fontSize: 16)),
+            SizedBox(height: 8),
+            Text('X : Mark as Reject (advance to next)', style: TextStyle(fontSize: 16)),
             SizedBox(height: 8),
             Text('C : Clear status', style: TextStyle(fontSize: 16)),
           ],
