@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'screens/image_picker_screen.dart';
 
-void main() {
-  runApp(const MyApp());
+void main(List<String> args) {
+  // Optional: Accept a directory path as first argument
+  final String? initialDirectory = args.isNotEmpty ? args[0] : null;
+
+  runApp(MyApp(initialDirectory: initialDirectory));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final String? initialDirectory;
+
+  const MyApp({this.initialDirectory, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +23,7 @@ class MyApp extends StatelessWidget {
       ),
       darkTheme: ThemeData.dark(useMaterial3: true),
       themeMode: ThemeMode.dark,
-      home: const ImagePickerScreen(),
+      home: ImagePickerScreen(initialDirectory: initialDirectory),
     );
   }
 }

@@ -4,9 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/image_item.dart';
 import '../services/selection_persistence_service.dart';
+import '../services/app_config_service.dart';
+import 'subfolder_picker_screen.dart';
 
 class ImagePickerScreen extends StatefulWidget {
-  const ImagePickerScreen({super.key});
+  final String? initialDirectory;
+
+  const ImagePickerScreen({this.initialDirectory, super.key});
 
   @override
   State<ImagePickerScreen> createState() => _ImagePickerScreenState();
@@ -17,6 +21,18 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   int _currentIndex = 0;
   bool _isLoading = false;
   String? _currentDirectory;
+  bool _usedDefaultPath = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // If an initial directory was provided, load it immediately
+    if (widget.initialDirectory != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadDirectoryDirectly(widget.initialDirectory!);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +43,18 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
-          title: const Text('Image Picker'),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Image Picker'),
+              if (_currentDirectory != null)
+                Text(
+                  _getCurrentFolderName(),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                ),
+            ],
+          ),
           backgroundColor: Colors.grey[900],
           foregroundColor: Colors.white,
           actions: [
@@ -269,60 +296,121 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     }
   }
 
+  /// Get the current folder name for display
+  String _getCurrentFolderName() {
+    if (_currentDirectory == null) return '';
+    return _currentDirectory!.split('/').last;
+  }
+
+  /// Load images from a directory path directly (used for initial directory)
+  Future<void> _loadDirectoryDirectly(String directoryPath) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final directory = Directory(directoryPath);
+
+      if (!directory.existsSync()) {
+        throw Exception('Directory does not exist: $directoryPath');
+      }
+
+      await _loadImagesFromDirectory(directoryPath);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading directory: $e')),
+        );
+      }
+    }
+  }
+
+  /// Load images from a directory (shared logic)
+  Future<void> _loadImagesFromDirectory(String selectedDirectory) async {
+    final directory = Directory(selectedDirectory);
+    final files = directory
+        .listSync()
+        .whereType<File>()
+        .where((file) {
+          final ext = file.path.toLowerCase();
+          return ext.endsWith('.jpg') ||
+              ext.endsWith('.jpeg') ||
+              ext.endsWith('.png') ||
+              ext.endsWith('.gif') ||
+              ext.endsWith('.bmp') ||
+              ext.endsWith('.webp');
+        })
+        .toList();
+
+    files.sort((a, b) => a.path.compareTo(b.path));
+
+    // Create ImageItem list
+    var images = files.map((file) => ImageItem(file: file)).toList();
+
+    // AUTO-LOAD: Restore saved selections if they exist
+    images = await SelectionPersistenceService.loadSelections(
+      directoryPath: selectedDirectory,
+      images: images,
+    );
+
+    setState(() {
+      _images = images;
+      _currentIndex = 0;
+      _currentDirectory = selectedDirectory;
+      _isLoading = false;
+    });
+
+    // Show feedback if selections were loaded
+    final hasSelections = images.any((img) => img.status != ImageStatus.none);
+    if (hasSelections && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Previous selections restored'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   Future<void> _pickFolder() async {
     setState(() => _isLoading = true);
 
     try {
-      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      String? selectedDirectory;
+
+      // STRATEGY: Try default path first on Steam Deck
+      final defaultDir = AppConfigService.getDefaultDirectory();
+
+      if (defaultDir != null) {
+        // Show subfolder picker screen
+        final result = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SubfolderPickerScreen(
+              baseDirectory: defaultDir,
+            ),
+          ),
+        );
+
+        if (result != null) {
+          selectedDirectory = result;
+          _usedDefaultPath = true;
+        } else {
+          // User cancelled or chose fallback - use native file picker
+          selectedDirectory = await FilePicker.platform.getDirectoryPath();
+          _usedDefaultPath = false;
+        }
+      } else {
+        // Fallback: Use native file picker (existing behavior)
+        selectedDirectory = await FilePicker.platform.getDirectoryPath();
+        _usedDefaultPath = false;
+      }
 
       if (selectedDirectory == null) {
         setState(() => _isLoading = false);
         return;
       }
 
-      final directory = Directory(selectedDirectory);
-      final files = directory
-          .listSync()
-          .whereType<File>()
-          .where((file) {
-            final ext = file.path.toLowerCase();
-            return ext.endsWith('.jpg') ||
-                ext.endsWith('.jpeg') ||
-                ext.endsWith('.png') ||
-                ext.endsWith('.gif') ||
-                ext.endsWith('.bmp') ||
-                ext.endsWith('.webp');
-          })
-          .toList();
-
-      files.sort((a, b) => a.path.compareTo(b.path));
-
-      // Create ImageItem list
-      var images = files.map((file) => ImageItem(file: file)).toList();
-
-      // AUTO-LOAD: Restore saved selections if they exist
-      images = await SelectionPersistenceService.loadSelections(
-        directoryPath: selectedDirectory,
-        images: images,
-      );
-
-      setState(() {
-        _images = images;
-        _currentIndex = 0;
-        _currentDirectory = selectedDirectory;
-        _isLoading = false;
-      });
-
-      // Show feedback if selections were loaded
-      final hasSelections = images.any((img) => img.status != ImageStatus.none);
-      if (hasSelections && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Previous selections restored'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      await _loadImagesFromDirectory(selectedDirectory);
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
