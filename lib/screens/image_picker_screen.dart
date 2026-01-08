@@ -31,6 +31,21 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadDirectoryDirectly(widget.initialDirectory!);
       });
+    } else {
+      // On Steam Deck, automatically show subfolder picker if default directory exists
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _autoShowSubfolderPickerIfAvailable();
+      });
+    }
+  }
+
+  /// Automatically show the subfolder picker on Steam Deck if the default directory exists
+  Future<void> _autoShowSubfolderPickerIfAvailable() async {
+    final defaultDir = AppConfigService.getDefaultDirectory();
+
+    if (defaultDir != null) {
+      // Default directory exists on Steam Deck, show the subfolder picker
+      await _pickFolder();
     }
   }
 
