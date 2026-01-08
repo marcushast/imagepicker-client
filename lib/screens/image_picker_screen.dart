@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/image_item.dart';
+import '../services/selection_persistence_service.dart';
 
 class ImagePickerScreen extends StatefulWidget {
   const ImagePickerScreen({super.key});
@@ -15,6 +16,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   List<ImageItem> _images = [];
   int _currentIndex = 0;
   bool _isLoading = false;
+  String? _currentDirectory;
 
   @override
   Widget build(BuildContext context) {
@@ -295,11 +297,32 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
 
       files.sort((a, b) => a.path.compareTo(b.path));
 
+      // Create ImageItem list
+      var images = files.map((file) => ImageItem(file: file)).toList();
+
+      // AUTO-LOAD: Restore saved selections if they exist
+      images = await SelectionPersistenceService.loadSelections(
+        directoryPath: selectedDirectory,
+        images: images,
+      );
+
       setState(() {
-        _images = files.map((file) => ImageItem(file: file)).toList();
+        _images = images;
         _currentIndex = 0;
+        _currentDirectory = selectedDirectory;
         _isLoading = false;
       });
+
+      // Show feedback if selections were loaded
+      final hasSelections = images.any((img) => img.status != ImageStatus.none);
+      if (hasSelections && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Previous selections restored'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -326,6 +349,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     setState(() {
       _images[_currentIndex].status = ImageStatus.pick;
     });
+    _autoSave();
     if (_currentIndex < _images.length - 1) {
       _nextImage();
     }
@@ -335,12 +359,14 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     setState(() {
       _images[_currentIndex].status = ImageStatus.pick;
     });
+    _autoSave();
   }
 
   void _rejectImage() {
     setState(() {
       _images[_currentIndex].status = ImageStatus.reject;
     });
+    _autoSave();
     if (_currentIndex < _images.length - 1) {
       _nextImage();
     }
@@ -350,12 +376,29 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     setState(() {
       _images[_currentIndex].status = ImageStatus.reject;
     });
+    _autoSave();
   }
 
   void _clearStatus() {
     setState(() {
       _images[_currentIndex].status = ImageStatus.none;
     });
+    _autoSave();
+  }
+
+  /// Auto-save selections after any status change
+  Future<void> _autoSave() async {
+    if (_currentDirectory == null) {
+      print('Auto-save skipped: no directory selected');
+      return;
+    }
+
+    print('Auto-saving to $_currentDirectory');
+    final success = await SelectionPersistenceService.saveSelections(
+      directoryPath: _currentDirectory!,
+      images: _images,
+    );
+    print('Auto-save result: $success');
   }
 
   void _showHelp() {
