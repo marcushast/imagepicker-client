@@ -119,9 +119,9 @@ The bundle directory contains:
    - Working Directory: `/home/deck/Applications/DeckImagePicker`
    - Add a custom icon if desired
 
-### In Gaming Mode (Optional Advanced Setup)
+### In Gaming Mode (Recommended)
 
-If you want to launch from Gaming Mode:
+The Deck Image Picker has full native Steam Deck controller support! For the best experience, launch it through Steam:
 
 1. **Add as Non-Steam Game**:
    - In Desktop Mode, open Steam
@@ -131,17 +131,63 @@ If you want to launch from Gaming Mode:
 
 2. **Configure Launch Options**:
    - Right-click game → Properties → General
-   - Launch Options: (leave empty for now)
+   - Launch Options: (leave empty)
    - Start In: `/home/deck/Applications/DeckImagePicker`
 
-3. **Controller Configuration**:
-   - The app uses keyboard shortcuts (P, X, C, arrows)
-   - You'll need to configure Steam Input to map controller buttons to these keys
-   - Suggested mapping:
-     - D-Pad / Left Stick: Arrow keys
-     - A button: P (Pick)
-     - B button: X (Reject)
-     - X button: C (Clear)
+3. **Import Controller Configuration (for back buttons)**:
+   - Right-click game → Properties → Controller → Edit Layout
+   - Click settings icon (⚙️) → Browse Configs → Import Config
+   - Navigate to: `steam-input-config/deck-imagepicker.vdf`
+   - Import and apply the configuration
+
+   This maps the back buttons (L4/L5/R4/R5) to quick review actions.
+
+## Native Gamepad Controls
+
+The application has full native controller support with these default mappings:
+
+### Navigation
+- **D-Pad** or **Left Stick** → Navigate between images (Left/Right) and mark images (Up/Down)
+- **Left Trigger (LT)** → Previous image
+- **Right Trigger (RT)** → Next image
+
+### Actions
+- **A Button** → Pick image and advance to next
+- **B Button** → Reject image and advance to next
+- **X Button** → Clear image status
+- **Y Button** → Show help dialog
+
+### Quick Navigation
+- **Left Bumper (LB)** → Jump to first unreviewed image
+- **Right Bumper (RB)** → Jump to next unreviewed image
+
+### Menu
+- **Select Button** → Open folder picker
+- **Start Button** → Show help dialog
+- **Hold Select + Start (0.5s)** → Exit application
+
+### Back Buttons (with Steam Input config)
+- **L4** → Pick and advance (same as P key)
+- **L5** → Pick without advancing (same as Up arrow)
+- **R4** → Reject and advance (same as X key)
+- **R5** → Reject without advancing (same as Down arrow)
+
+### Visual Indicators
+When a gamepad is connected, you'll see a gamepad icon (🎮) in the top-right corner of the app.
+
+## Controller Configuration Details
+
+### Standard Buttons (Work Automatically)
+All standard gamepad buttons work natively without any configuration:
+- Face buttons (A/B/X/Y)
+- D-Pad
+- Left and right sticks
+- Triggers (LT/RT)
+- Bumpers (LB/RB)
+- Select and Start
+
+### Back Buttons (Require Steam Input)
+The Steam Deck's back buttons (L4/L5/R4/R5) are not accessible through standard gamepad APIs and require Steam Input configuration. See the `steam-input-config/` directory for the configuration file and detailed import instructions.
 
 ## Testing and Validation
 
@@ -186,6 +232,27 @@ Ensure GTK file picker dependencies are installed:
 ```bash
 sudo pacman -S zenity
 ```
+
+### Gamepad Not Detected
+If the gamepad icon doesn't appear in the app:
+1. Make sure you're running the latest version of the app
+2. Try disconnecting and reconnecting the controller
+3. Check if the controller works in other applications
+4. In Desktop Mode, the built-in Steam Deck controls may not be detected - this is normal; launch through Steam for full support
+
+### Back Buttons Not Working
+If L4/L5/R4/R5 don't trigger actions:
+1. Make sure you've imported the Steam Input configuration (see above)
+2. Verify you're launching the app through Steam (as a Non-Steam Game)
+3. Back buttons only work when Steam Input is active
+4. You can customize the mappings in Steam's controller configuration UI
+
+### Controller Input Lag or Double-Presses
+If buttons feel unresponsive or trigger twice:
+1. This shouldn't happen with the built-in debouncing (100ms)
+2. Make sure you're running on the latest app version
+3. Try restarting the application
+4. Check if Steam Input and native gamepad support are conflicting (shouldn't happen, but worth checking)
 
 ## Critical Files
 

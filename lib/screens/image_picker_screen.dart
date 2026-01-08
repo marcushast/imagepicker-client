@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import '../models/image_item.dart';
 import '../services/selection_persistence_service.dart';
 import '../services/app_config_service.dart';
+import '../services/gamepad_service.dart';
 import 'subfolder_picker_screen.dart';
 
 class ImagePickerScreen extends StatefulWidget {
@@ -22,10 +23,15 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   bool _isLoading = false;
   String? _currentDirectory;
   bool _usedDefaultPath = false;
+  GamepadService? _gamepadService;
+  bool _isDialogOpen = false;
 
   @override
   void initState() {
     super.initState();
+    // Initialize gamepad support
+    _initializeGamepad();
+
     // If an initial directory was provided, load it immediately
     if (widget.initialDirectory != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -37,6 +43,40 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         _autoShowSubfolderPickerIfAvailable();
       });
     }
+  }
+
+  /// Initialize gamepad service and wire up callbacks
+  void _initializeGamepad() {
+    _gamepadService = GamepadService()
+      ..onPreviousImage = _previousImage
+      ..onNextImage = _nextImage
+      ..onPickImage = _pickImage
+      ..onRejectImage = () {
+        // B button: Close dialog if open, otherwise reject image
+        if (_isDialogOpen) {
+          Navigator.of(context).pop();
+        } else {
+          _rejectImage();
+        }
+      }
+      ..onClearStatus = _clearStatus
+      ..onPickWithoutAdvance = _pickImageWithoutAdvance
+      ..onRejectWithoutAdvance = _rejectImageWithoutAdvance
+      ..onShowHelp = _showHelp
+      ..onOpenFolderPicker = _pickFolder
+      ..onExitApp = _exitApplication
+      ..onJumpToFirstUnreviewed = _jumpToFirstUnreviewed
+      ..onJumpToNextUnreviewed = _jumpToNextUnreviewed
+      ..onConnectionChanged = (connected, name) {
+        setState(() {}); // Rebuild to show/hide gamepad indicator
+      }
+      ..initialize();
+  }
+
+  @override
+  void dispose() {
+    _gamepadService?.dispose();
+    super.dispose();
   }
 
   /// Automatically show the subfolder picker on Steam Deck if the default directory exists
@@ -81,6 +121,14 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     '${_currentIndex + 1} / ${_images.length}',
                     style: const TextStyle(fontSize: 16),
                   ),
+                ),
+              ),
+            if (_gamepadService?.isConnected ?? false)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Tooltip(
+                  message: 'Gamepad connected: ${_gamepadService?.connectedGamepadName ?? "Unknown"}',
+                  child: const Icon(Icons.videogame_asset, color: Colors.greenAccent),
                 ),
               ),
             IconButton(
@@ -284,6 +332,14 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
+
+    // Handle exit keys (ESC and Q) - work even when no images loaded
+    if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.keyQ) {
+      _exitApplication();
+      return;
+    }
+
     if (_images.isEmpty) return;
 
     switch (event.logicalKey) {
@@ -489,6 +545,40 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     _autoSave();
   }
 
+  /// Jump to the first unreviewed image
+  void _jumpToFirstUnreviewed() {
+    if (_images.isEmpty) return;
+
+    final firstUnreviewed = _images.indexWhere((img) => img.status == ImageStatus.none);
+    if (firstUnreviewed != -1) {
+      setState(() => _currentIndex = firstUnreviewed);
+    }
+  }
+
+  /// Jump to the next unreviewed image after the current one
+  void _jumpToNextUnreviewed() {
+    if (_images.isEmpty) return;
+
+    final nextUnreviewed = _images.sublist(_currentIndex + 1)
+        .indexWhere((img) => img.status == ImageStatus.none);
+    if (nextUnreviewed != -1) {
+      setState(() => _currentIndex = _currentIndex + 1 + nextUnreviewed);
+    }
+  }
+
+  /// Exit the application gracefully
+  void _exitApplication() {
+    // Auto-save before exit if images are loaded
+    if (_images.isNotEmpty && _currentDirectory != null) {
+      SelectionPersistenceService.saveSelections(
+        directoryPath: _currentDirectory!,
+        images: _images,
+      );
+    }
+    // Gracefully exit the application
+    SystemNavigator.pop();
+  }
+
   /// Auto-save selections after any status change
   Future<void> _autoSave() async {
     if (_currentDirectory == null) {
@@ -505,32 +595,102 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   }
 
   void _showHelp() {
+    final hasGamepad = _gamepadService?.isConnected ?? false;
+    _isDialogOpen = true;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Keyboard Shortcuts'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('← / → : Navigate between images', style: TextStyle(fontSize: 16)),
-            SizedBox(height: 8),
-            Text('↑ : Mark as Pick (stay on image)', style: TextStyle(fontSize: 16)),
-            SizedBox(height: 8),
-            Text('↓ : Mark as Reject (stay on image)', style: TextStyle(fontSize: 16)),
-            SizedBox(height: 8),
-            Text('P : Mark as Pick (advance to next)', style: TextStyle(fontSize: 16)),
-            SizedBox(height: 8),
-            Text('X : Mark as Reject (advance to next)', style: TextStyle(fontSize: 16)),
-            SizedBox(height: 8),
-            Text('C : Clear status', style: TextStyle(fontSize: 16)),
+      builder: (context) => KeyboardListener(
+        focusNode: FocusNode()..requestFocus(),
+        autofocus: true,
+        onKeyEvent: (event) {
+          if (event is KeyDownEvent) {
+            // Close dialog on ESC or B button
+            if (event.logicalKey == LogicalKeyboardKey.escape) {
+              Navigator.pop(context);
+            }
+          }
+        },
+        child: AlertDialog(
+          title: const Text('Controls'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 500, // Fixed height to ensure scrollability
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Keyboard Shortcuts',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  _buildControlRow('← / →', 'Navigate between images'),
+                  _buildControlRow('↑', 'Mark as Pick (stay on image)'),
+                  _buildControlRow('↓', 'Mark as Reject (stay on image)'),
+                  _buildControlRow('P', 'Mark as Pick (advance to next)'),
+                  _buildControlRow('X', 'Mark as Reject (advance to next)'),
+                  _buildControlRow('C', 'Clear status'),
+                  _buildControlRow('ESC / Q', 'Exit application'),
+
+                  if (hasGamepad) ...[
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    const Text('Gamepad Controls',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    _buildControlRow('D-Pad Left/Right', 'Navigate prev/next image'),
+                    _buildControlRow('D-Pad Up', 'Pick and advance'),
+                    _buildControlRow('D-Pad Down', 'Reject and advance'),
+                    _buildControlRow('Left Stick', 'Same as D-Pad'),
+                    _buildControlRow('A Button', 'Pick and advance'),
+                    _buildControlRow('B Button', 'Close this dialog'),
+                    _buildControlRow('X Button', 'Clear status'),
+                    _buildControlRow('Y Button', 'Show this help'),
+                    _buildControlRow('LB Bumper', 'Jump to first unreviewed'),
+                    _buildControlRow('RB Bumper', 'Jump to next unreviewed'),
+                    _buildControlRow('LT / RT Triggers', 'Navigate images'),
+                    _buildControlRow('Select', 'Open folder picker'),
+                    _buildControlRow('Start', 'Show this help'),
+                    _buildControlRow('Hold Select + Start', 'Exit application'),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close (B Button)'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+      ),
+    ).then((_) {
+      // Reset dialog state when closed
+      _isDialogOpen = false;
+    });
+  }
+
+  Widget _buildControlRow(String key, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 180,
+            child: Text(
+              key,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+              ),
+            ),
           ),
+          Expanded(child: Text(description)),
         ],
       ),
     );
