@@ -227,6 +227,45 @@ class GamepadService {
   void _handleAnalogEvent(GamepadEvent event) {
     final now = DateTime.now();
 
+    // Steam Deck D-pad handling (comes through as analog axes 6 and 7 with large values)
+    // Must be checked BEFORE trigger handling since triggers also use keys 6 and 7
+    // D-pad sends values around ±32767, triggers send normalized 0.0-1.0
+    if (event.key == '6' && event.value.abs() > 1000) {
+      // D-pad horizontal (left/right)
+      if (now.difference(_lastInputTime) < _debounceDuration) {
+        return;
+      }
+
+      if (event.value < 0) {
+        // D-pad left
+        onPreviousImage?.call();
+        _lastInputTime = now;
+      } else if (event.value > 0) {
+        // D-pad right
+        onNextImage?.call();
+        _lastInputTime = now;
+      }
+      return;
+    }
+
+    if (event.key == '7' && event.value.abs() > 1000) {
+      // D-pad vertical (up/down)
+      if (now.difference(_lastInputTime) < _debounceDuration) {
+        return;
+      }
+
+      if (event.value < 0) {
+        // D-pad up
+        onPickImage?.call();
+        _lastInputTime = now;
+      } else if (event.value > 0) {
+        // D-pad down
+        onRejectImage?.call();
+        _lastInputTime = now;
+      }
+      return;
+    }
+
     // Handle triggers (buttons 6 and 7, or axis events)
     if (event.key == 'BTN_TL2' || event.key == '6' || event.key == 'ABS_Z' || event.key == 'LEFT_TRIGGER') {
       if (event.value > _analogThreshold) {
