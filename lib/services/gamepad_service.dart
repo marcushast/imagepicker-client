@@ -36,6 +36,7 @@ class GamepadService {
   VoidCallback? onPickWithoutAdvance;
   VoidCallback? onRejectWithoutAdvance;
   VoidCallback? onShowHelp;
+  VoidCallback? onToggleFullscreen;
   VoidCallback? onOpenFolderPicker;
   VoidCallback? onExitApp;
   VoidCallback? onJumpToFirstUnreviewed;
@@ -158,7 +159,7 @@ class GamepadService {
       case 'BTN_NORTH':
       case 'BTN_Y':
       case '3':
-        onShowHelp?.call();
+        onToggleFullscreen?.call();
         _lastInputTime = now;
         break;
 

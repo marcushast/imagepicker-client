@@ -25,6 +25,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   bool _usedDefaultPath = false;
   GamepadService? _gamepadService;
   bool _isDialogOpen = false;
+  bool _isFullscreenMode = false; // Toggle for fullscreen viewing mode
 
   @override
   void initState() {
@@ -63,6 +64,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       ..onPickWithoutAdvance = _pickImageWithoutAdvance
       ..onRejectWithoutAdvance = _rejectImageWithoutAdvance
       ..onShowHelp = _showHelp
+      ..onToggleFullscreen = () {
+        // Y button: Toggle fullscreen mode
+        setState(() {
+          _isFullscreenMode = !_isFullscreenMode;
+        });
+      }
       ..onOpenFolderPicker = _pickFolder
       ..onExitApp = _exitApplication
       ..onJumpToFirstUnreviewed = _jumpToFirstUnreviewed
@@ -97,7 +104,8 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       onKeyEvent: _handleKeyEvent,
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(
+        // Hide AppBar in fullscreen mode
+        appBar: _isFullscreenMode ? null : AppBar(
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -187,6 +195,33 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   Widget _buildImageView() {
     final currentImage = _images[_currentIndex];
 
+    // Toggle between fullscreen and normal mode
+    return _isFullscreenMode
+        ? _buildFullscreenView(currentImage)
+        : _buildNormalView(currentImage);
+  }
+
+  /// Fullscreen view: Image with right sidebar only
+  Widget _buildFullscreenView(ImageItem currentImage) {
+    return Row(
+      children: [
+        // Image takes remaining space
+        Expanded(
+          child: Center(
+            child: Image.file(
+              currentImage.file,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+        // Right sidebar with status indicators
+        _buildRightSidebar(currentImage),
+      ],
+    );
+  }
+
+  /// Normal view: Full UI with status bar and navigation - preserved for easy revert
+  Widget _buildNormalView(ImageItem currentImage) {
     return Column(
       children: [
         Expanded(
@@ -330,6 +365,58 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     );
   }
 
+  /// Build the right sidebar for fullscreen mode with status indicators
+  Widget _buildRightSidebar(ImageItem currentImage) {
+    const double iconSize = 40.0;
+    const double activeOpacity = 1.0;
+    const double inactiveOpacity = 0.25;
+
+    return Container(
+      width: 80,
+      color: Colors.black,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Pick icon (green check)
+          IconButton(
+            icon: Icon(
+              Icons.check_circle,
+              size: iconSize,
+              color: Colors.green.withOpacity(
+                currentImage.status == ImageStatus.pick ? activeOpacity : inactiveOpacity,
+              ),
+            ),
+            onPressed: _pickImage,
+          ),
+          const SizedBox(height: 24),
+          // Reject icon (red cancel)
+          IconButton(
+            icon: Icon(
+              Icons.cancel,
+              size: iconSize,
+              color: Colors.red.withOpacity(
+                currentImage.status == ImageStatus.reject ? activeOpacity : inactiveOpacity,
+              ),
+            ),
+            onPressed: _rejectImage,
+          ),
+          const SizedBox(height: 24),
+          // No status icon (grey circle)
+          IconButton(
+            icon: Icon(
+              Icons.radio_button_unchecked,
+              size: iconSize,
+              color: Colors.grey.withOpacity(
+                currentImage.status == ImageStatus.none ? activeOpacity : inactiveOpacity,
+              ),
+            ),
+            onPressed: _clearStatus,
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
 
@@ -337,6 +424,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.keyQ) {
       _exitApplication();
+      return;
+    }
+
+    // Handle help dialog (H key) - works even when no images loaded
+    if (event.logicalKey == LogicalKeyboardKey.keyH) {
+      _showHelp();
       return;
     }
 
@@ -363,6 +456,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         break;
       case LogicalKeyboardKey.keyC:
         _clearStatus();
+        break;
+      case LogicalKeyboardKey.keyY:
+        // Toggle fullscreen mode
+        setState(() {
+          _isFullscreenMode = !_isFullscreenMode;
+        });
         break;
     }
   }
@@ -631,6 +730,8 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                   _buildControlRow('P', 'Mark as Pick (advance to next)'),
                   _buildControlRow('X', 'Mark as Reject (advance to next)'),
                   _buildControlRow('C', 'Clear status'),
+                  _buildControlRow('Y', 'Toggle fullscreen mode'),
+                  _buildControlRow('H', 'Show this help'),
                   _buildControlRow('ESC / Q', 'Exit application'),
 
                   if (hasGamepad) ...[
@@ -647,7 +748,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     _buildControlRow('A Button', 'Pick and advance'),
                     _buildControlRow('B Button', 'Close this dialog'),
                     _buildControlRow('X Button', 'Clear status'),
-                    _buildControlRow('Y Button', 'Show this help'),
+                    _buildControlRow('Y Button', 'Toggle fullscreen mode'),
                     _buildControlRow('LB Bumper', 'Jump to first unreviewed'),
                     _buildControlRow('RB Bumper', 'Jump to next unreviewed'),
                     _buildControlRow('LT / RT Triggers', 'Navigate images'),
