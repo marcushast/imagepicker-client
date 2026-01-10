@@ -6,6 +6,8 @@ import '../models/image_item.dart';
 import '../services/selection_persistence_service.dart';
 import '../services/app_config_service.dart';
 import '../services/gamepad_service.dart';
+import '../services/image_cache_service.dart';
+import '../widgets/cached_image_widget.dart';
 import 'subfolder_picker_screen.dart';
 
 class ImagePickerScreen extends StatefulWidget {
@@ -26,10 +28,16 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   GamepadService? _gamepadService;
   bool _isDialogOpen = false;
   bool _isFullscreenMode = false; // Toggle for fullscreen viewing mode
+  late ImageCacheService _imageCacheService;
 
   @override
   void initState() {
     super.initState();
+    // Initialize image cache service for preloading
+    _imageCacheService = ImageCacheService(
+      maxCacheSize: 5,
+      preloadDistance: 2,
+    );
     // Initialize gamepad support
     _initializeGamepad();
 
@@ -83,6 +91,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   @override
   void dispose() {
     _gamepadService?.dispose();
+    _imageCacheService.dispose();
     super.dispose();
   }
 
@@ -208,8 +217,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         // Image takes remaining space
         Expanded(
           child: Center(
-            child: Image.file(
-              currentImage.file,
+            child: CachedImageWidget(
+              file: currentImage.file,
+              cachedImage: _imageCacheService.getCachedImage(currentImage.file.path),
               fit: BoxFit.contain,
             ),
           ),
@@ -226,8 +236,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       children: [
         Expanded(
           child: Center(
-            child: Image.file(
-              currentImage.file,
+            child: CachedImageWidget(
+              file: currentImage.file,
+              cachedImage: _imageCacheService.getCachedImage(currentImage.file.path),
               fit: BoxFit.contain,
             ),
           ),
@@ -529,6 +540,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       _isLoading = false;
     });
 
+    // Preload images around the initial position
+    _preloadImagesAroundCurrent();
+
     // Show feedback if selections were loaded
     final hasSelections = images.any((img) => img.status != ImageStatus.none);
     if (hasSelections && mounted) {
@@ -594,13 +608,23 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   void _previousImage() {
     if (_currentIndex > 0) {
       setState(() => _currentIndex--);
+      _preloadImagesAroundCurrent();
     }
   }
 
   void _nextImage() {
     if (_currentIndex < _images.length - 1) {
       setState(() => _currentIndex++);
+      _preloadImagesAroundCurrent();
     }
+  }
+
+  /// Preload images around the current index for faster navigation
+  void _preloadImagesAroundCurrent() {
+    if (_images.isEmpty) return;
+
+    final imageFiles = _images.map((img) => img.file).toList();
+    _imageCacheService.preloadImagesAround(imageFiles, _currentIndex);
   }
 
   void _pickImage() {
@@ -651,6 +675,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     final firstUnreviewed = _images.indexWhere((img) => img.status == ImageStatus.none);
     if (firstUnreviewed != -1) {
       setState(() => _currentIndex = firstUnreviewed);
+      _preloadImagesAroundCurrent();
     }
   }
 
@@ -662,6 +687,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         .indexWhere((img) => img.status == ImageStatus.none);
     if (nextUnreviewed != -1) {
       setState(() => _currentIndex = _currentIndex + 1 + nextUnreviewed);
+      _preloadImagesAroundCurrent();
     }
   }
 
