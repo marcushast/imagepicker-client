@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/folder_info.dart';
+import '../services/gamepad_service.dart';
 
 /// Screen for browsing and selecting subfolders within a base directory.
 /// Designed to be touch-friendly for Steam Deck with large tap targets.
@@ -8,10 +9,7 @@ class SubfolderPickerScreen extends StatefulWidget {
   /// The base directory to scan for subfolders
   final String baseDirectory;
 
-  const SubfolderPickerScreen({
-    required this.baseDirectory,
-    super.key,
-  });
+  const SubfolderPickerScreen({required this.baseDirectory, super.key});
 
   @override
   State<SubfolderPickerScreen> createState() => _SubfolderPickerScreenState();
@@ -21,11 +19,33 @@ class _SubfolderPickerScreenState extends State<SubfolderPickerScreen> {
   List<FolderInfo> _subfolders = [];
   bool _isLoading = true;
   String? _errorMessage;
+  int _focusedIndex = 0;
+  final ScrollController _scrollController = ScrollController();
+  GamepadService? _gamepadService;
 
   @override
   void initState() {
     super.initState();
     _loadSubfolders();
+    _initializeGamepad();
+  }
+
+  @override
+  void dispose() {
+    _gamepadService?.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _initializeGamepad() {
+    _gamepadService = GamepadService()
+      ..onNavigateUp = _navigateUp
+      ..onNavigateDown = _navigateDown
+      ..onNavigateLeft = _navigateLeft
+      ..onNavigateRight = _navigateRight
+      ..onSelectItem = _selectFocusedFolder
+      ..onCancelPicker = _useFallbackPicker
+      ..initialize();
   }
 
   /// Load all subfolders from the base directory
@@ -89,6 +109,74 @@ class _SubfolderPickerScreenState extends State<SubfolderPickerScreen> {
     Navigator.pop(context, null);
   }
 
+  void _navigateUp() {
+    if (_subfolders.isEmpty || _isLoading) return;
+
+    setState(() {
+      if (_focusedIndex >= 2) {
+        _focusedIndex -= 2;
+      }
+    });
+    _scrollToFocused();
+  }
+
+  void _navigateDown() {
+    if (_subfolders.isEmpty || _isLoading) return;
+
+    setState(() {
+      final newIndex = _focusedIndex + 2;
+      if (newIndex < _subfolders.length) {
+        _focusedIndex = newIndex;
+      }
+    });
+    _scrollToFocused();
+  }
+
+  void _navigateLeft() {
+    if (_subfolders.isEmpty || _isLoading) return;
+
+    setState(() {
+      if (_focusedIndex % 2 == 1) {
+        _focusedIndex--;
+      }
+    });
+    _scrollToFocused();
+  }
+
+  void _navigateRight() {
+    if (_subfolders.isEmpty || _isLoading) return;
+
+    setState(() {
+      if (_focusedIndex % 2 == 0 && _focusedIndex + 1 < _subfolders.length) {
+        _focusedIndex++;
+      }
+    });
+    _scrollToFocused();
+  }
+
+  void _selectFocusedFolder() {
+    if (_subfolders.isEmpty || _isLoading) return;
+    _selectFolder(_subfolders[_focusedIndex]);
+  }
+
+  void _scrollToFocused() {
+    if (_subfolders.isEmpty) return;
+
+    final itemHeight = 180.0;
+    final rowIndex = _focusedIndex ~/ 2;
+    final targetOffset = rowIndex * itemHeight;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final minScroll = _scrollController.position.minScrollExtent;
+
+    final clampedOffset = targetOffset.clamp(minScroll, maxScroll);
+
+    _scrollController.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+    );
+  }
+
   /// Show dialog to create a new folder
   Future<void> _createNewFolder() async {
     final controller = TextEditingController();
@@ -138,17 +226,17 @@ class _SubfolderPickerScreenState extends State<SubfolderPickerScreen> {
       await newFolder.create();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Created folder "$folderName"')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Created folder "$folderName"')));
 
       // Reload the folder list
       _loadSubfolders();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error creating folder: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error creating folder: $e')));
     }
   }
 
@@ -176,9 +264,7 @@ class _SubfolderPickerScreenState extends State<SubfolderPickerScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_errorMessage != null) {
@@ -232,15 +318,17 @@ class _SubfolderPickerScreenState extends State<SubfolderPickerScreen> {
     }
 
     return GridView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, // 2 columns for Steam Deck
+        crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 1.3, // Wider cards
+        childAspectRatio: 1.3,
       ),
       itemCount: _subfolders.length,
-      itemBuilder: (context, index) => _buildFolderCard(_subfolders[index]),
+      itemBuilder: (context, index) =>
+          _buildFolderCardWithFocus(_subfolders[index], index),
     );
   }
 
@@ -293,5 +381,23 @@ class _SubfolderPickerScreenState extends State<SubfolderPickerScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildFolderCardWithFocus(FolderInfo folder, int index) {
+    final isFocused = index == _focusedIndex;
+
+    Widget card = _buildFolderCard(folder);
+
+    if (isFocused) {
+      card = Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.yellow, width: 3),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: card,
+      );
+    }
+
+    return card;
   }
 }

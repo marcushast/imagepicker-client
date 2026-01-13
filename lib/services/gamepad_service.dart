@@ -43,6 +43,14 @@ class GamepadService {
   VoidCallback? onJumpToNextUnreviewed;
   VoidCallback? onJumpToLastUnreviewed;
 
+  // Callbacks for folder picker navigation
+  VoidCallback? onNavigateUp;
+  VoidCallback? onNavigateDown;
+  VoidCallback? onNavigateLeft;
+  VoidCallback? onNavigateRight;
+  VoidCallback? onSelectItem;
+  VoidCallback? onCancelPicker;
+
   // Callback for connection state changes
   Function(bool connected, String? gamepadName)? onConnectionChanged;
 
@@ -139,6 +147,7 @@ class GamepadService {
       case 'BTN_SOUTH':
       case 'BTN_A':
       case '0':
+        onSelectItem?.call();
         onPickImage?.call();
         _lastInputTime = now;
         break;
@@ -146,6 +155,7 @@ class GamepadService {
       case 'BTN_EAST':
       case 'BTN_B':
       case '1':
+        onCancelPicker?.call();
         onRejectImage?.call();
         _lastInputTime = now;
         break;
@@ -182,24 +192,28 @@ class GamepadService {
       // D-Pad
       case 'BTN_DPAD_LEFT':
       case '14':
+        onNavigateLeft?.call();
         onPreviousImage?.call();
         _lastInputTime = now;
         break;
 
       case 'BTN_DPAD_RIGHT':
       case '15':
+        onNavigateRight?.call();
         onNextImage?.call();
         _lastInputTime = now;
         break;
 
       case 'BTN_DPAD_UP':
       case '12':
+        onNavigateUp?.call();
         onPickImage?.call(); // Changed: Pick AND advance
         _lastInputTime = now;
         break;
 
       case 'BTN_DPAD_DOWN':
       case '13':
+        onNavigateDown?.call();
         onRejectImage?.call(); // Changed: Reject AND advance
         _lastInputTime = now;
         break;
@@ -240,10 +254,12 @@ class GamepadService {
 
       if (event.value < 0) {
         // D-pad left
+        onNavigateLeft?.call();
         onPreviousImage?.call();
         _lastInputTime = now;
       } else if (event.value > 0) {
         // D-pad right
+        onNavigateRight?.call();
         onNextImage?.call();
         _lastInputTime = now;
       }
@@ -258,10 +274,12 @@ class GamepadService {
 
       if (event.value < 0) {
         // D-pad up
+        onNavigateUp?.call();
         onPickImage?.call();
         _lastInputTime = now;
       } else if (event.value > 0) {
         // D-pad down
+        onNavigateDown?.call();
         onRejectImage?.call();
         _lastInputTime = now;
       }
@@ -269,7 +287,10 @@ class GamepadService {
     }
 
     // Handle triggers (buttons 6 and 7, or axis events)
-    if (event.key == 'BTN_TL2' || event.key == '6' || event.key == 'ABS_Z' || event.key == 'LEFT_TRIGGER') {
+    if (event.key == 'BTN_TL2' ||
+        event.key == '6' ||
+        event.key == 'ABS_Z' ||
+        event.key == 'LEFT_TRIGGER') {
       if (event.value > _analogThreshold) {
         if (now.difference(_lastInputTime) >= _debounceDuration) {
           onPreviousImage?.call();
@@ -279,7 +300,10 @@ class GamepadService {
       return;
     }
 
-    if (event.key == 'BTN_TR2' || event.key == '7' || event.key == 'ABS_RZ' || event.key == 'RIGHT_TRIGGER') {
+    if (event.key == 'BTN_TR2' ||
+        event.key == '7' ||
+        event.key == 'ABS_RZ' ||
+        event.key == 'RIGHT_TRIGGER') {
       if (event.value > _analogThreshold) {
         if (now.difference(_lastInputTime) >= _debounceDuration) {
           onNextImage?.call();
@@ -296,9 +320,11 @@ class GamepadService {
       }
 
       if (event.value < -_deadZone) {
+        onNavigateLeft?.call();
         onPreviousImage?.call();
         _lastStickInputTime = now;
       } else if (event.value > _deadZone) {
+        onNavigateRight?.call();
         onNextImage?.call();
         _lastStickInputTime = now;
       }
@@ -311,9 +337,11 @@ class GamepadService {
       }
 
       if (event.value < -_deadZone) {
+        onNavigateUp?.call();
         onPickImage?.call(); // Changed: Pick AND advance
         _lastStickInputTime = now;
       } else if (event.value > _deadZone) {
+        onNavigateDown?.call();
         onRejectImage?.call(); // Changed: Reject AND advance
         _lastStickInputTime = now;
       }
