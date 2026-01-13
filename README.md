@@ -40,7 +40,7 @@ A Flutter-based image review application optimized for Steam Deck with full game
 - **Right Bumper (RB)** → Jump to next unreviewed image
 
 #### Menu
-- **Select** → Open folder picker
+- **Select** → Show menu (Open folder picker or exit)
 - **Start** → Show help
 - **Hold Select + Start (0.5s)** → Exit app
 
@@ -64,6 +64,9 @@ When a gamepad is connected, a controller icon (🎮) appears in the top-right c
 | `P` | Mark as Pick and advance |
 | `X` | Mark as Reject and advance |
 | `C` | Clear status |
+| `M` | Show menu |
+| `H` | Show help |
+| `Y` | Toggle fullscreen mode |
 | `ESC` / `Q` | Exit application |
 
 ## Installation

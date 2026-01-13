@@ -162,7 +162,7 @@ The application has full native controller support with these default mappings:
 - **Right Bumper (RB)** → Jump to next unreviewed image
 
 ### Menu
-- **Select Button** → Open folder picker
+- **Select Button** → Show menu (Open folder picker or exit)
 - **Start Button** → Show help dialog
 - **Hold Select + Start (0.5s)** → Exit application
 

@@ -38,6 +38,7 @@ class GamepadService {
   VoidCallback? onShowHelp;
   VoidCallback? onToggleFullscreen;
   VoidCallback? onOpenFolderPicker;
+  VoidCallback? onShowMenu;
   VoidCallback? onExitApp;
   VoidCallback? onJumpToFirstUnreviewed;
   VoidCallback? onJumpToNextUnreviewed;
@@ -223,7 +224,7 @@ class GamepadService {
       case '8':
         // Only trigger if not part of exit combo
         if (!_startPressed) {
-          onOpenFolderPicker?.call();
+          onShowMenu?.call();
           _lastInputTime = now;
         }
         break;

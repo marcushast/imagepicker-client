@@ -76,6 +76,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         });
       }
       ..onOpenFolderPicker = _pickFolder
+      ..onShowMenu = _showMenu
       ..onExitApp = _exitApplication
       ..onJumpToFirstUnreviewed = _jumpToFirstUnreviewed
       ..onJumpToNextUnreviewed = _jumpToNextUnreviewed
@@ -130,6 +131,11 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                 backgroundColor: Colors.grey[900],
                 foregroundColor: Colors.white,
                 actions: [
+                  IconButton(
+                    icon: const Icon(Icons.menu),
+                    onPressed: _showMenu,
+                    tooltip: 'Menu (M)',
+                  ),
                   if (_images.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -481,6 +487,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     // Handle help dialog (H key) - works even when no images loaded
     if (event.logicalKey == LogicalKeyboardKey.keyH) {
       _showHelp();
+      return;
+    }
+
+    // Handle menu (M key) - works even when no images loaded
+    if (event.logicalKey == LogicalKeyboardKey.keyM) {
+      _showMenu();
       return;
     }
 
@@ -839,6 +851,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                   _buildControlRow('C', 'Clear status'),
                   _buildControlRow('Y', 'Toggle fullscreen mode'),
                   _buildControlRow('H', 'Show this help'),
+                  _buildControlRow('M', 'Show menu'),
                   _buildControlRow('ESC / Q', 'Exit application'),
 
                   if (hasGamepad) ...[
@@ -867,7 +880,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     _buildControlRow('LB Bumper', 'Jump to first unreviewed'),
                     _buildControlRow('RB Bumper', 'Jump to next unreviewed'),
                     _buildControlRow('LT / RT Triggers', 'Navigate images'),
-                    _buildControlRow('Select', 'Open folder picker'),
+                    _buildControlRow('Select', 'Show menu'),
                     _buildControlRow('Start', 'Show this help'),
                     _buildControlRow('Hold Select + Start', 'Exit application'),
                   ],
@@ -888,6 +901,55 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       // Reset dialog state when closed
       _isDialogOpen = false;
     });
+  }
+
+  Future<void> _showMenu() async {
+    _isDialogOpen = true;
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        title: const Text('Menu'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.folder_open),
+              title: const Text('Open Folder Picker'),
+              onTap: () => Navigator.of(context).pop('folder'),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.exit_to_app),
+              title: const Text('Exit Application'),
+              onTap: () => Navigator.of(context).pop('exit'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close (B Button)'),
+          ),
+        ],
+      ),
+    );
+
+    _isDialogOpen = false;
+
+    if (!mounted) return;
+
+    switch (result) {
+      case 'folder':
+        _pickFolder();
+        break;
+      case 'exit':
+        _exitApplication();
+        break;
+    }
   }
 
   Widget _buildControlRow(String key, String description) {
