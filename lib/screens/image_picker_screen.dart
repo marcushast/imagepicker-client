@@ -82,6 +82,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       ..onExitApp = _exitApplication
       ..onJumpToFirstUnreviewed = _jumpToFirstUnreviewed
       ..onJumpToNextUnreviewed = _jumpToNextUnreviewed
+      ..onJumpToLastUnreviewed = _jumpToResumePoint
       ..onConnectionChanged = (connected, name) {
         setState(() {}); // Rebuild to show/hide gamepad indicator
       }
@@ -358,6 +359,29 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                 icon: const Icon(Icons.arrow_forward),
                 iconSize: 32,
                 color: Colors.white,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: _jumpToFirstUnreviewed,
+                icon: const Icon(Icons.skip_previous, size: 18),
+                label: const Text('First Unreviewed'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                ),
+              ),
+              const SizedBox(width: 16),
+              TextButton.icon(
+                onPressed: _jumpToResumePoint,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('Resume'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                ),
               ),
             ],
           ),
@@ -689,6 +713,38 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       setState(() => _currentIndex = _currentIndex + 1 + nextUnreviewed);
       _preloadImagesAroundCurrent();
     }
+  }
+
+  /// Jump to the resume point: the first unreviewed image after the last reviewed one.
+  /// This helps you continue where you left off in your review session.
+  void _jumpToResumePoint() {
+    if (_images.isEmpty) return;
+
+    // Find the last image that has been reviewed (picked or rejected)
+    int lastReviewedIndex = -1;
+    for (int i = _images.length - 1; i >= 0; i--) {
+      if (_images[i].status != ImageStatus.none) {
+        lastReviewedIndex = i;
+        break;
+      }
+    }
+
+    // If we found a reviewed image, jump to the next one (if it exists and is unreviewed)
+    // If no reviewed images found, jump to the first image
+    int resumeIndex;
+    if (lastReviewedIndex == -1) {
+      // No reviewed images, start from beginning
+      resumeIndex = 0;
+    } else if (lastReviewedIndex + 1 < _images.length) {
+      // Jump to the image right after the last reviewed one
+      resumeIndex = lastReviewedIndex + 1;
+    } else {
+      // Last reviewed image is the final image, stay where we are
+      return;
+    }
+
+    setState(() => _currentIndex = resumeIndex);
+    _preloadImagesAroundCurrent();
   }
 
   /// Exit the application gracefully

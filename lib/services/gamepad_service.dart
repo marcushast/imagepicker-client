@@ -41,6 +41,7 @@ class GamepadService {
   VoidCallback? onExitApp;
   VoidCallback? onJumpToFirstUnreviewed;
   VoidCallback? onJumpToNextUnreviewed;
+  VoidCallback? onJumpToLastUnreviewed;
 
   // Callback for connection state changes
   Function(bool connected, String? gamepadName)? onConnectionChanged;
