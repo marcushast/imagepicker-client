@@ -136,6 +136,11 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     onPressed: _showMenu,
                     tooltip: 'Menu (M)',
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.menu),
+                    onPressed: _showMenu,
+                    tooltip: 'Menu (M)',
+                  ),
                   if (_images.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -478,9 +483,17 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     if (event is! KeyDownEvent) return;
 
     // Handle exit keys (ESC and Q) - work even when no images loaded
-    if (event.logicalKey == LogicalKeyboardKey.escape ||
-        event.logicalKey == LogicalKeyboardKey.keyQ) {
+    // Don't exit app if dialog is open and ESC is pressed
+    if (!_isDialogOpen &&
+        (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.keyQ)) {
       _exitApplication();
+      return;
+    }
+
+    // Close dialog if ESC is pressed
+    if (_isDialogOpen && event.logicalKey == LogicalKeyboardKey.escape) {
+      Navigator.pop(context);
       return;
     }
 
@@ -493,6 +506,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     // Handle menu (M key) - works even when no images loaded
     if (event.logicalKey == LogicalKeyboardKey.keyM) {
       _showMenu();
+      return;
+    }
+
+    // Close dialog if ESC is pressed
+    if (_isDialogOpen && event.logicalKey == LogicalKeyboardKey.escape) {
+      Navigator.pop(context);
       return;
     }
 
@@ -903,6 +922,29 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     });
   }
 
+
+  Widget _buildControlRow(String key, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 180,
+            child: Text(
+              key,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+          Expanded(child: Text(description)),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showMenu() async {
     _isDialogOpen = true;
 
@@ -930,7 +972,6 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         ),
         actions: [
           TextButton(
-            autofocus: true,
             onPressed: () => Navigator.pop(context),
             child: const Text('Close (B Button)'),
           ),
@@ -950,27 +991,5 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         _exitApplication();
         break;
     }
-  }
-
-  Widget _buildControlRow(String key, String description) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 180,
-            child: Text(
-              key,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-              ),
-            ),
-          ),
-          Expanded(child: Text(description)),
-        ],
-      ),
-    );
   }
 }
