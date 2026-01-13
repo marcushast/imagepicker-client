@@ -743,18 +743,27 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       }
     }
 
-    // If we found a reviewed image, jump to the next one (if it exists and is unreviewed)
-    // If no reviewed images found, jump to the first image
     int resumeIndex;
     if (lastReviewedIndex == -1) {
       // No reviewed images, start from beginning
       resumeIndex = 0;
-    } else if (lastReviewedIndex + 1 < _images.length) {
-      // Jump to the image right after the last reviewed one
-      resumeIndex = lastReviewedIndex + 1;
     } else {
-      // Last reviewed image is the final image, jump to last image to show completion
-      resumeIndex = _images.length - 1;
+      // Search forward from last reviewed index to find first unreviewed image
+      int firstUnreviewedAfterLastReviewed = -1;
+      for (int i = lastReviewedIndex + 1; i < _images.length; i++) {
+        if (_images[i].status == ImageStatus.none) {
+          firstUnreviewedAfterLastReviewed = i;
+          break;
+        }
+      }
+
+      if (firstUnreviewedAfterLastReviewed != -1) {
+        // Found unreviewed image after last reviewed one, jump to it
+        resumeIndex = firstUnreviewedAfterLastReviewed;
+      } else {
+        // All images after last reviewed are also reviewed, jump to last image
+        resumeIndex = _images.length - 1;
+      }
     }
 
     setState(() => _currentIndex = resumeIndex);
