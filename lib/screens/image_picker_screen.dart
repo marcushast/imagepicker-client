@@ -34,10 +34,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   void initState() {
     super.initState();
     // Initialize image cache service for preloading
-    _imageCacheService = ImageCacheService(
-      maxCacheSize: 5,
-      preloadDistance: 2,
-    );
+    _imageCacheService = ImageCacheService(maxCacheSize: 5, preloadDistance: 2);
     // Initialize gamepad support
     _initializeGamepad();
 
@@ -115,51 +112,57 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       child: Scaffold(
         backgroundColor: Colors.black,
         // Hide AppBar in fullscreen mode
-        appBar: _isFullscreenMode ? null : AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Image Picker'),
-              if (_currentDirectory != null)
-                Text(
-                  _getCurrentFolderName(),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+        appBar: _isFullscreenMode
+            ? null
+            : AppBar(
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Image Picker'),
+                    if (_currentDirectory != null)
+                      Text(
+                        _getCurrentFolderName(),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                      ),
+                  ],
                 ),
-            ],
-          ),
-          backgroundColor: Colors.grey[900],
-          foregroundColor: Colors.white,
-          actions: [
-            if (_images.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Center(
-                  child: Text(
-                    '${_currentIndex + 1} / ${_images.length}',
-                    style: const TextStyle(fontSize: 16),
+                backgroundColor: Colors.grey[900],
+                foregroundColor: Colors.white,
+                actions: [
+                  if (_images.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Center(
+                        child: Text(
+                          '${_currentIndex + 1} / ${_images.length}',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ),
+                    ),
+                  if (_gamepadService?.isConnected ?? false)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Tooltip(
+                        message:
+                            'Gamepad connected: ${_gamepadService?.connectedGamepadName ?? "Unknown"}',
+                        child: const Icon(
+                          Icons.videogame_asset,
+                          color: Colors.greenAccent,
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.info_outline),
+                    onPressed: _showHelp,
                   ),
-                ),
+                ],
               ),
-            if (_gamepadService?.isConnected ?? false)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Tooltip(
-                  message: 'Gamepad connected: ${_gamepadService?.connectedGamepadName ?? "Unknown"}',
-                  child: const Icon(Icons.videogame_asset, color: Colors.greenAccent),
-                ),
-              ),
-            IconButton(
-              icon: const Icon(Icons.info_outline),
-              onPressed: _showHelp,
-            ),
-          ],
-        ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _images.isEmpty
-                ? _buildEmptyState()
-                : _buildImageView(),
+            ? _buildEmptyState()
+            : _buildImageView(),
         floatingActionButton: _images.isEmpty
             ? FloatingActionButton.extended(
                 onPressed: _pickFolder,
@@ -176,26 +179,16 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.photo_library,
-            size: 100,
-            color: Colors.grey[700],
-          ),
+          Icon(Icons.photo_library, size: 100, color: Colors.grey[700]),
           const SizedBox(height: 20),
           Text(
             'No images loaded',
-            style: TextStyle(
-              fontSize: 24,
-              color: Colors.grey[500],
-            ),
+            style: TextStyle(fontSize: 24, color: Colors.grey[500]),
           ),
           const SizedBox(height: 10),
           Text(
             'Click the button below to select a folder',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -220,7 +213,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
           child: Center(
             child: CachedImageWidget(
               file: currentImage.file,
-              cachedImage: _imageCacheService.getCachedImage(currentImage.file.path),
+              cachedImage: _imageCacheService.getCachedImage(
+                currentImage.file.path,
+              ),
               fit: BoxFit.contain,
             ),
           ),
@@ -239,7 +234,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
           child: Center(
             child: CachedImageWidget(
               file: currentImage.file,
-              cachedImage: _imageCacheService.getCachedImage(currentImage.file.path),
+              cachedImage: _imageCacheService.getCachedImage(
+                currentImage.file.path,
+              ),
               fit: BoxFit.contain,
             ),
           ),
@@ -296,9 +293,15 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   }
 
   Widget _buildNavigationBar() {
-    final pickCount = _images.where((img) => img.status == ImageStatus.pick).length;
-    final rejectCount = _images.where((img) => img.status == ImageStatus.reject).length;
-    final noneCount = _images.where((img) => img.status == ImageStatus.none).length;
+    final pickCount = _images
+        .where((img) => img.status == ImageStatus.pick)
+        .length;
+    final rejectCount = _images
+        .where((img) => img.status == ImageStatus.reject)
+        .length;
+    final noneCount = _images
+        .where((img) => img.status == ImageStatus.none)
+        .length;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -328,7 +331,10 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                 onPressed: _rejectImage,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                 ),
                 icon: const Icon(Icons.cancel),
                 label: const Text('Reject (X)'),
@@ -338,7 +344,10 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                 onPressed: _clearStatus,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                 ),
                 icon: const Icon(Icons.clear),
                 label: const Text('Clear (C)'),
@@ -348,14 +357,19 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                 onPressed: _pickImage,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                 ),
                 icon: const Icon(Icons.check_circle),
                 label: const Text('Pick (P)'),
               ),
               const SizedBox(width: 40),
               IconButton(
-                onPressed: _currentIndex < _images.length - 1 ? _nextImage : null,
+                onPressed: _currentIndex < _images.length - 1
+                    ? _nextImage
+                    : null,
                 icon: const Icon(Icons.arrow_forward),
                 iconSize: 32,
                 color: Colors.white,
@@ -370,18 +384,14 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                 onPressed: _jumpToFirstUnreviewed,
                 icon: const Icon(Icons.skip_previous, size: 18),
                 label: const Text('First Unreviewed'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                ),
+                style: TextButton.styleFrom(foregroundColor: Colors.white70),
               ),
               const SizedBox(width: 16),
               TextButton.icon(
                 onPressed: _jumpToResumePoint,
                 icon: const Icon(Icons.play_arrow, size: 18),
                 label: const Text('Resume'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                ),
+                style: TextButton.styleFrom(foregroundColor: Colors.white70),
               ),
             ],
           ),
@@ -418,7 +428,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
               Icons.check_circle,
               size: iconSize,
               color: Colors.green.withOpacity(
-                currentImage.status == ImageStatus.pick ? activeOpacity : inactiveOpacity,
+                currentImage.status == ImageStatus.pick
+                    ? activeOpacity
+                    : inactiveOpacity,
               ),
             ),
             onPressed: _pickImage,
@@ -430,7 +442,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
               Icons.cancel,
               size: iconSize,
               color: Colors.red.withOpacity(
-                currentImage.status == ImageStatus.reject ? activeOpacity : inactiveOpacity,
+                currentImage.status == ImageStatus.reject
+                    ? activeOpacity
+                    : inactiveOpacity,
               ),
             ),
             onPressed: _rejectImage,
@@ -442,7 +456,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
               Icons.radio_button_unchecked,
               size: iconSize,
               color: Colors.grey.withOpacity(
-                currentImage.status == ImageStatus.none ? activeOpacity : inactiveOpacity,
+                currentImage.status == ImageStatus.none
+                    ? activeOpacity
+                    : inactiveOpacity,
               ),
             ),
             onPressed: _clearStatus,
@@ -522,9 +538,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading directory: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading directory: $e')));
       }
     }
   }
@@ -532,19 +548,15 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   /// Load images from a directory (shared logic)
   Future<void> _loadImagesFromDirectory(String selectedDirectory) async {
     final directory = Directory(selectedDirectory);
-    final files = directory
-        .listSync()
-        .whereType<File>()
-        .where((file) {
-          final ext = file.path.toLowerCase();
-          return ext.endsWith('.jpg') ||
-              ext.endsWith('.jpeg') ||
-              ext.endsWith('.png') ||
-              ext.endsWith('.gif') ||
-              ext.endsWith('.bmp') ||
-              ext.endsWith('.webp');
-        })
-        .toList();
+    final files = directory.listSync().whereType<File>().where((file) {
+      final ext = file.path.toLowerCase();
+      return ext.endsWith('.jpg') ||
+          ext.endsWith('.jpeg') ||
+          ext.endsWith('.png') ||
+          ext.endsWith('.gif') ||
+          ext.endsWith('.bmp') ||
+          ext.endsWith('.webp');
+    }).toList();
 
     files.sort((a, b) => a.path.compareTo(b.path));
 
@@ -593,9 +605,8 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         final result = await Navigator.push<String>(
           context,
           MaterialPageRoute(
-            builder: (context) => SubfolderPickerScreen(
-              baseDirectory: defaultDir,
-            ),
+            builder: (context) =>
+                SubfolderPickerScreen(baseDirectory: defaultDir),
           ),
         );
 
@@ -622,9 +633,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading images: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading images: $e')));
       }
     }
   }
@@ -696,7 +707,9 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   void _jumpToFirstUnreviewed() {
     if (_images.isEmpty) return;
 
-    final firstUnreviewed = _images.indexWhere((img) => img.status == ImageStatus.none);
+    final firstUnreviewed = _images.indexWhere(
+      (img) => img.status == ImageStatus.none,
+    );
     if (firstUnreviewed != -1) {
       setState(() => _currentIndex = firstUnreviewed);
       _preloadImagesAroundCurrent();
@@ -707,7 +720,8 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   void _jumpToNextUnreviewed() {
     if (_images.isEmpty) return;
 
-    final nextUnreviewed = _images.sublist(_currentIndex + 1)
+    final nextUnreviewed = _images
+        .sublist(_currentIndex + 1)
         .indexWhere((img) => img.status == ImageStatus.none);
     if (nextUnreviewed != -1) {
       setState(() => _currentIndex = _currentIndex + 1 + nextUnreviewed);
@@ -739,8 +753,8 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       // Jump to the image right after the last reviewed one
       resumeIndex = lastReviewedIndex + 1;
     } else {
-      // Last reviewed image is the final image, stay where we are
-      return;
+      // Last reviewed image is the final image, jump to last image to show completion
+      resumeIndex = _images.length - 1;
     }
 
     setState(() => _currentIndex = resumeIndex);
@@ -803,8 +817,10 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Keyboard Shortcuts',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Keyboard Shortcuts',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   _buildControlRow('← / →', 'Navigate between images'),
                   _buildControlRow('↑', 'Mark as Pick (stay on image)'),
@@ -820,10 +836,18 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 16),
-                    const Text('Gamepad Controls',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Gamepad Controls',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    _buildControlRow('D-Pad Left/Right', 'Navigate prev/next image'),
+                    _buildControlRow(
+                      'D-Pad Left/Right',
+                      'Navigate prev/next image',
+                    ),
                     _buildControlRow('D-Pad Up', 'Pick and advance'),
                     _buildControlRow('D-Pad Down', 'Reject and advance'),
                     _buildControlRow('Left Stick', 'Same as D-Pad'),
