@@ -136,11 +136,6 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     onPressed: _showMenu,
                     tooltip: 'Menu (M)',
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.menu),
-                    onPressed: _showMenu,
-                    tooltip: 'Menu (M)',
-                  ),
                   if (_images.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -921,7 +916,6 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       _isDialogOpen = false;
     });
   }
-
 
   Widget _buildControlRow(String key, String description) {
     return Padding(
