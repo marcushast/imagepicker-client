@@ -22,9 +22,9 @@ class SelectionPersistenceService {
       final saveFilePath = _getSaveFilePath(directoryPath);
       final saveFile = File(saveFilePath);
 
-      // Filter to only save images with non-none status
+      // Filter to only save images with non-none status or isNewGroup marker
       final selectionsToSave = images
-          .where((img) => img.status != ImageStatus.none)
+          .where((img) => img.status != ImageStatus.none || img.isNewGroup)
           .map((img) => img.toJson())
           .toList();
 
@@ -38,7 +38,9 @@ class SelectionPersistenceService {
       final jsonString = const JsonEncoder.withIndent('  ').convert(data);
       await saveFile.writeAsString(jsonString);
 
-      print('Successfully saved ${selectionsToSave.length} selections to $saveFilePath');
+      print(
+        'Successfully saved ${selectionsToSave.length} selections to $saveFilePath',
+      );
       return true;
     } catch (e) {
       // Log error but don't crash app
@@ -69,13 +71,16 @@ class SelectionPersistenceService {
       // Validate version (future-proofing for migration)
       final version = data['version'] as String?;
       if (version != _version) {
-        print('Warning: Save file version mismatch. Expected $_version, got $version');
+        print(
+          'Warning: Save file version mismatch. Expected $_version, got $version',
+        );
         // For now, proceed anyway. In future, could add migration logic here.
       }
 
       // Create a map of file path -> status for quick lookup
       final selections = data['selections'] as List<dynamic>;
       final statusMap = <String, ImageStatus>{};
+      final isNewGroupMap = <String, bool>{};
 
       for (final selection in selections) {
         final selectionMap = selection as Map<String, dynamic>;
@@ -83,12 +88,16 @@ class SelectionPersistenceService {
         final statusString = selectionMap['status'] as String?;
         final status = _parseStatus(statusString);
         statusMap[filePath] = status;
+        isNewGroupMap[filePath] = selectionMap['isNewGroup'] as bool? ?? false;
       }
 
-      // Apply saved statuses to matching images
+      // Apply saved statuses and isNewGroup to matching images
       for (final image in images) {
         if (statusMap.containsKey(image.filePath)) {
           image.status = statusMap[image.filePath]!;
+        }
+        if (isNewGroupMap.containsKey(image.filePath)) {
+          image.isNewGroup = isNewGroupMap[image.filePath]!;
         }
       }
 

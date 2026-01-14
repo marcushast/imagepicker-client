@@ -32,6 +32,7 @@ class GamepadService {
   VoidCallback? onNextImage;
   VoidCallback? onPickImage;
   VoidCallback? onRejectImage;
+  VoidCallback? onAddGroupMarker;
   VoidCallback? onClearStatus;
   VoidCallback? onPickWithoutAdvance;
   VoidCallback? onRejectWithoutAdvance;
@@ -205,17 +206,10 @@ class GamepadService {
         _lastInputTime = now;
         break;
 
-      case 'BTN_DPAD_UP':
-      case '12':
-        onNavigateUp?.call();
-        onPickImage?.call(); // Changed: Pick AND advance
-        _lastInputTime = now;
-        break;
-
       case 'BTN_DPAD_DOWN':
       case '13':
         onNavigateDown?.call();
-        onRejectImage?.call(); // Changed: Reject AND advance
+        onAddGroupMarker?.call();
         _lastInputTime = now;
         break;
 
@@ -268,20 +262,15 @@ class GamepadService {
     }
 
     if (event.key == '7' && event.value.abs() > 1000) {
-      // D-pad vertical (up/down)
+      // D-pad vertical (down only)
       if (now.difference(_lastInputTime) < _debounceDuration) {
         return;
       }
 
-      if (event.value < 0) {
-        // D-pad up
-        onNavigateUp?.call();
-        onPickImage?.call();
-        _lastInputTime = now;
-      } else if (event.value > 0) {
+      if (event.value > 0) {
         // D-pad down
         onNavigateDown?.call();
-        onRejectImage?.call();
+        onAddGroupMarker?.call();
         _lastInputTime = now;
       }
       return;
@@ -337,11 +326,7 @@ class GamepadService {
         return;
       }
 
-      if (event.value < -_deadZone) {
-        onNavigateUp?.call();
-        onPickImage?.call(); // Changed: Pick AND advance
-        _lastStickInputTime = now;
-      } else if (event.value > _deadZone) {
+      if (event.value > _deadZone) {
         onNavigateDown?.call();
         onRejectImage?.call(); // Changed: Reject AND advance
         _lastStickInputTime = now;

@@ -65,6 +65,7 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
           _rejectImage();
         }
       }
+      ..onAddGroupMarker = _addGroupMarker
       ..onClearStatus = _clearStatus
       ..onPickWithoutAdvance = _pickImageWithoutAdvance
       ..onRejectWithoutAdvance = _rejectImageWithoutAdvance
@@ -216,14 +217,48 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       children: [
         // Image takes remaining space
         Expanded(
-          child: Center(
-            child: CachedImageWidget(
-              file: currentImage.file,
-              cachedImage: _imageCacheService.getCachedImage(
-                currentImage.file.path,
+          child: Stack(
+            children: [
+              Center(
+                child: CachedImageWidget(
+                  file: currentImage.file,
+                  cachedImage: _imageCacheService.getCachedImage(
+                    currentImage.file.path,
+                  ),
+                  fit: BoxFit.contain,
+                ),
               ),
-              fit: BoxFit.contain,
-            ),
+              if (currentImage.isNewGroup)
+                Positioned(
+                  top: 16,
+                  left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.folder_open, color: Colors.white, size: 20),
+                        SizedBox(width: 4),
+                        Text(
+                          'NEW GROUP',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         // Right sidebar with status indicators
@@ -237,14 +272,48 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     return Column(
       children: [
         Expanded(
-          child: Center(
-            child: CachedImageWidget(
-              file: currentImage.file,
-              cachedImage: _imageCacheService.getCachedImage(
-                currentImage.file.path,
+          child: Stack(
+            children: [
+              Center(
+                child: CachedImageWidget(
+                  file: currentImage.file,
+                  cachedImage: _imageCacheService.getCachedImage(
+                    currentImage.file.path,
+                  ),
+                  fit: BoxFit.contain,
+                ),
               ),
-              fit: BoxFit.contain,
-            ),
+              if (currentImage.isNewGroup)
+                Positioned(
+                  top: 16,
+                  left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.folder_open, color: Colors.white, size: 20),
+                        SizedBox(width: 4),
+                        Text(
+                          'NEW GROUP',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         _buildStatusBar(currentImage),
@@ -729,6 +798,13 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     _autoSave();
   }
 
+  void _addGroupMarker() {
+    setState(() {
+      _images[_currentIndex].isNewGroup = !_images[_currentIndex].isNewGroup;
+    });
+    _autoSave();
+  }
+
   /// Jump to the first unreviewed image
   void _jumpToFirstUnreviewed() {
     if (_images.isEmpty) return;
@@ -884,9 +960,11 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                       'D-Pad Left/Right',
                       'Navigate prev/next image',
                     ),
-                    _buildControlRow('D-Pad Up', 'Pick and advance'),
-                    _buildControlRow('D-Pad Down', 'Reject and advance'),
-                    _buildControlRow('Left Stick', 'Same as D-Pad'),
+                    _buildControlRow('D-Pad Down', 'Add group marker'),
+                    _buildControlRow(
+                      'Left Stick (L/R)',
+                      'Navigate prev/next image',
+                    ),
                     _buildControlRow('A Button', 'Pick and advance'),
                     _buildControlRow('B Button', 'Close this dialog'),
                     _buildControlRow('X Button', 'Clear status'),

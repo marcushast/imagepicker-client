@@ -1,18 +1,16 @@
 import 'dart:io';
 
-enum ImageStatus {
-  none,
-  pick,
-  reject,
-}
+enum ImageStatus { none, pick, reject }
 
 class ImageItem {
   final File file;
   ImageStatus status;
+  bool isNewGroup;
 
   ImageItem({
     required this.file,
     this.status = ImageStatus.none,
+    this.isNewGroup = false,
   });
 
   String get fileName => file.path.split('/').last;
@@ -23,6 +21,7 @@ class ImageItem {
     return {
       'filePath': file.path,
       'status': status.name,
+      'isNewGroup': isNewGroup,
     };
   }
 
@@ -31,6 +30,7 @@ class ImageItem {
     return ImageItem(
       file: file,
       status: _parseStatus(json['status'] as String?),
+      isNewGroup: json['isNewGroup'] as bool? ?? false,
     );
   }
 
