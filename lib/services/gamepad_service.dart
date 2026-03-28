@@ -206,6 +206,12 @@ class GamepadService {
         _lastInputTime = now;
         break;
 
+      case 'BTN_DPAD_UP':
+      case '12':
+        onNavigateUp?.call();
+        _lastInputTime = now;
+        break;
+
       case 'BTN_DPAD_DOWN':
       case '13':
         onNavigateDown?.call();
@@ -262,12 +268,16 @@ class GamepadService {
     }
 
     if (event.key == '7' && event.value.abs() > 1000) {
-      // D-pad vertical (down only)
+      // D-pad vertical (up/down)
       if (now.difference(_lastInputTime) < _debounceDuration) {
         return;
       }
 
-      if (event.value > 0) {
+      if (event.value < 0) {
+        // D-pad up
+        onNavigateUp?.call();
+        _lastInputTime = now;
+      } else if (event.value > 0) {
         // D-pad down
         onNavigateDown?.call();
         onAddGroupMarker?.call();

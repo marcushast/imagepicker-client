@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/image_item.dart';
+import '../models/image_group.dart';
 import '../services/selection_persistence_service.dart';
 import '../services/app_config_service.dart';
 import '../services/gamepad_service.dart';
 import '../services/image_cache_service.dart';
+import '../services/thumbnail_worker_service.dart';
 import '../widgets/cached_image_widget.dart';
+import '../widgets/grid_thumbnail_widget.dart';
 import 'subfolder_picker_screen.dart';
+
+/// Direction for grid navigation
+enum GridDirection { up, down, left, right }
 
 class ImagePickerScreen extends StatefulWidget {
   final String? initialDirectory;
@@ -30,11 +36,28 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   bool _isFullscreenMode = false; // Toggle for fullscreen viewing mode
   late ImageCacheService _imageCacheService;
 
+  // Grid view state
+  List<ImageGroup> _groups = [];
+  late ThumbnailWorkerService _thumbnailWorker;
+  final ScrollController _verticalScrollController = ScrollController();
+  final Map<int, ScrollController> _groupScrollControllers = {};
+
+  // Thumbnail size for grid
+  static const double _thumbnailSize = 150.0;
+  static const double _thumbnailSpacing = 8.0;
+  static const double _groupHeaderHeight = 40.0;
+
   @override
   void initState() {
     super.initState();
     // Initialize image cache service for preloading
     _imageCacheService = ImageCacheService(maxCacheSize: 5, preloadDistance: 2);
+    // Initialize thumbnail worker for grid view
+    _thumbnailWorker =
+        ThumbnailWorkerService(thumbnailSize: _thumbnailSize.toInt())
+          ..onThumbnailsUpdated = () {
+            if (mounted) setState(() {});
+          };
     // Initialize gamepad support
     _initializeGamepad();
 
@@ -54,8 +77,34 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   /// Initialize gamepad service and wire up callbacks
   void _initializeGamepad() {
     _gamepadService = GamepadService()
-      ..onPreviousImage = _previousImage
-      ..onNextImage = _nextImage
+      // Linear navigation - only used in fullscreen mode
+      ..onPreviousImage = () {
+        if (_isFullscreenMode) _previousImage();
+      }
+      ..onNextImage = () {
+        if (_isFullscreenMode) _nextImage();
+      }
+      // Grid navigation - used in grid mode, also fires for subfolder picker
+      ..onNavigateLeft = () {
+        if (!_isFullscreenMode && _images.isNotEmpty) {
+          _navigateInGrid(GridDirection.left);
+        }
+      }
+      ..onNavigateRight = () {
+        if (!_isFullscreenMode && _images.isNotEmpty) {
+          _navigateInGrid(GridDirection.right);
+        }
+      }
+      ..onNavigateUp = () {
+        if (!_isFullscreenMode && _images.isNotEmpty) {
+          _navigateInGrid(GridDirection.up);
+        }
+      }
+      ..onNavigateDown = () {
+        if (!_isFullscreenMode && _images.isNotEmpty) {
+          _navigateInGrid(GridDirection.down);
+        }
+      }
       ..onPickImage = _pickImage
       ..onRejectImage = () {
         // B button: Close dialog if open, otherwise reject image
@@ -65,7 +114,10 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
           _rejectImage();
         }
       }
-      ..onAddGroupMarker = _addGroupMarker
+      ..onAddGroupMarker = () {
+        // Only add group marker in fullscreen mode
+        if (_isFullscreenMode) _addGroupMarker();
+      }
       ..onClearStatus = _clearStatus
       ..onPickWithoutAdvance = _pickImageWithoutAdvance
       ..onRejectWithoutAdvance = _rejectImageWithoutAdvance
@@ -92,6 +144,11 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
   void dispose() {
     _gamepadService?.dispose();
     _imageCacheService.dispose();
+    _thumbnailWorker.dispose();
+    _verticalScrollController.dispose();
+    for (final controller in _groupScrollControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -213,6 +270,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
 
   /// Fullscreen view: Image with right sidebar only
   Widget _buildFullscreenView(ImageItem currentImage) {
+    // Get cached full image, or fall back to thumbnail as placeholder
+    final cachedFullImage = _imageCacheService.getCachedImage(
+      currentImage.file.path,
+    );
+    final thumbnail = _thumbnailWorker.getThumbnail(currentImage.file.path);
+
     return Row(
       children: [
         // Image takes remaining space
@@ -220,13 +283,24 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
           child: Stack(
             children: [
               Center(
-                child: CachedImageWidget(
-                  file: currentImage.file,
-                  cachedImage: _imageCacheService.getCachedImage(
-                    currentImage.file.path,
-                  ),
-                  fit: BoxFit.contain,
-                ),
+                child: cachedFullImage != null
+                    ? CachedImageWidget(
+                        file: currentImage.file,
+                        cachedImage: cachedFullImage,
+                        fit: BoxFit.contain,
+                      )
+                    : thumbnail != null
+                    // Use thumbnail as placeholder while full image loads
+                    ? CachedImageWidget(
+                        file: currentImage.file,
+                        cachedImage: thumbnail,
+                        fit: BoxFit.contain,
+                      )
+                    // Fall back to file loading
+                    : CachedImageWidget(
+                        file: currentImage.file,
+                        fit: BoxFit.contain,
+                      ),
               ),
               if (currentImage.isNewGroup)
                 Positioned(
@@ -267,58 +341,173 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     );
   }
 
-  /// Normal view: Full UI with status bar and navigation - preserved for easy revert
+  /// Grid view: Shows images organized by groups with thumbnails
   Widget _buildNormalView(ImageItem currentImage) {
+    if (_groups.isEmpty) {
+      _rebuildGroups();
+    }
+
     return Column(
       children: [
-        Expanded(
-          child: Stack(
+        // Grid of images organized by groups
+        Expanded(child: _buildGridView()),
+        // Stats bar at bottom
+        _buildGridStatsBar(),
+      ],
+    );
+  }
+
+  /// Build the grid view with groups as rows
+  Widget _buildGridView() {
+    return ListView.builder(
+      controller: _verticalScrollController,
+      itemCount: _groups.length,
+      itemBuilder: (context, groupIndex) {
+        final group = _groups[groupIndex];
+        return _buildGroupRow(group, groupIndex);
+      },
+    );
+  }
+
+  /// Build a single group row
+  Widget _buildGroupRow(ImageGroup group, int groupIndex) {
+    // Ensure scroll controller exists
+    _groupScrollControllers[groupIndex] ??= ScrollController();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Group header
+        Container(
+          height: _groupHeaderHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
             children: [
-              Center(
-                child: CachedImageWidget(
-                  file: currentImage.file,
-                  cachedImage: _imageCacheService.getCachedImage(
-                    currentImage.file.path,
-                  ),
-                  fit: BoxFit.contain,
+              Text(
+                'Group ${groupIndex + 1}',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              if (currentImage.isNewGroup)
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.folder_open, color: Colors.white, size: 20),
-                        SizedBox(width: 4),
-                        Text(
-                          'NEW GROUP',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              const SizedBox(width: 8),
+              Text(
+                '(${group.length} images)',
+                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              ),
             ],
           ),
         ),
-        _buildStatusBar(currentImage),
-        _buildNavigationBar(),
+        // Horizontal list of thumbnails
+        SizedBox(
+          height: _thumbnailSize + _thumbnailSpacing,
+          child: ListView.builder(
+            controller: _groupScrollControllers[groupIndex],
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            itemCount: group.length,
+            itemBuilder: (context, indexInGroup) {
+              final flatIndex = group.startIndex + indexInGroup;
+              final image = group.images[indexInGroup];
+              final isFocused = flatIndex == _currentIndex;
+
+              return Padding(
+                padding: EdgeInsets.only(right: _thumbnailSpacing),
+                child: GridThumbnailWidget(
+                  imageItem: image,
+                  thumbnail: _thumbnailWorker.getThumbnail(image.file.path),
+                  isFocused: isFocused,
+                  height: _thumbnailSize,
+                  onTap: () {
+                    setState(() => _currentIndex = flatIndex);
+                    _preloadImagesAroundCurrent();
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
       ],
+    );
+  }
+
+  /// Build stats bar for grid view
+  Widget _buildGridStatsBar() {
+    final pickCount = _images
+        .where((img) => img.status == ImageStatus.pick)
+        .length;
+    final rejectCount = _images
+        .where((img) => img.status == ImageStatus.reject)
+        .length;
+    final noneCount = _images
+        .where((img) => img.status == ImageStatus.none)
+        .length;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      color: Colors.grey[900],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Stats row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildStatChip('Picked', pickCount, Colors.green),
+              const SizedBox(width: 8),
+              _buildStatChip('Rejected', rejectCount, Colors.red),
+              const SizedBox(width: 8),
+              _buildStatChip('Unreviewed', noneCount, Colors.grey),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Action buttons row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: _pickImage,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                child: const Text('Pick (P)'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _rejectImage,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Reject (X)'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: _clearStatus,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                child: const Text('Clear (C)'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Navigation buttons row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: _jumpToResumePoint,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('Resume'),
+                style: TextButton.styleFrom(foregroundColor: Colors.white70),
+              ),
+              const SizedBox(width: 16),
+              TextButton.icon(
+                onPressed: _jumpToLastGroup,
+                icon: const Icon(Icons.last_page, size: 18),
+                label: const Text('Last Group'),
+                style: TextButton.styleFrom(foregroundColor: Colors.white70),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -583,16 +772,32 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
 
     switch (event.logicalKey) {
       case LogicalKeyboardKey.arrowLeft:
-        _previousImage();
+        if (_isFullscreenMode) {
+          _previousImage();
+        } else {
+          _navigateInGrid(GridDirection.left);
+        }
         break;
       case LogicalKeyboardKey.arrowRight:
-        _nextImage();
+        if (_isFullscreenMode) {
+          _nextImage();
+        } else {
+          _navigateInGrid(GridDirection.right);
+        }
         break;
       case LogicalKeyboardKey.arrowUp:
-        _pickImageWithoutAdvance();
+        if (_isFullscreenMode) {
+          _pickImageWithoutAdvance();
+        } else {
+          _navigateInGrid(GridDirection.up);
+        }
         break;
       case LogicalKeyboardKey.arrowDown:
-        _rejectImageWithoutAdvance();
+        if (_isFullscreenMode) {
+          _rejectImageWithoutAdvance();
+        } else {
+          _navigateInGrid(GridDirection.down);
+        }
         break;
       case LogicalKeyboardKey.keyP:
         _pickImage();
@@ -604,10 +809,12 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
         _clearStatus();
         break;
       case LogicalKeyboardKey.keyY:
-        // Toggle fullscreen mode
         setState(() {
           _isFullscreenMode = !_isFullscreenMode;
         });
+        break;
+      case LogicalKeyboardKey.keyG:
+        _addGroupMarker();
         break;
     }
   }
@@ -671,6 +878,13 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       _isLoading = false;
     });
 
+    // Build groups for grid view
+    _rebuildGroups();
+
+    // Start thumbnail generation for grid view
+    final allPaths = images.map((img) => img.file.path).toList();
+    _thumbnailWorker.startGeneration(allPaths);
+
     // Preload images around the initial position
     _preloadImagesAroundCurrent();
 
@@ -732,6 +946,117 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('Error loading images: $e')));
       }
+    }
+  }
+
+  /// Rebuild groups from the current image list
+  void _rebuildGroups() {
+    // Dispose old scroll controllers
+    for (final controller in _groupScrollControllers.values) {
+      controller.dispose();
+    }
+    _groupScrollControllers.clear();
+
+    // Build new groups
+    _groups = buildGroups(_images);
+
+    // Create scroll controllers for each group
+    for (int i = 0; i < _groups.length; i++) {
+      _groupScrollControllers[i] = ScrollController();
+    }
+  }
+
+  /// Navigate in grid view (2D navigation)
+  void _navigateInGrid(GridDirection direction) {
+    if (_images.isEmpty || _groups.isEmpty) return;
+
+    final (currentGroup, currentCol) = flatIndexToGroupPosition(
+      _groups,
+      _currentIndex,
+    );
+    int newGroup = currentGroup;
+    int newCol = currentCol;
+
+    switch (direction) {
+      case GridDirection.left:
+        if (currentCol > 0) {
+          newCol = currentCol - 1;
+        }
+        break;
+      case GridDirection.right:
+        if (currentCol < _groups[currentGroup].length - 1) {
+          newCol = currentCol + 1;
+        }
+        break;
+      case GridDirection.up:
+        if (currentGroup > 0) {
+          newGroup = currentGroup - 1;
+          // Clamp column to new group's length
+          newCol = currentCol.clamp(0, _groups[newGroup].length - 1);
+        }
+        break;
+      case GridDirection.down:
+        if (currentGroup < _groups.length - 1) {
+          newGroup = currentGroup + 1;
+          // Clamp column to new group's length
+          newCol = currentCol.clamp(0, _groups[newGroup].length - 1);
+        }
+        break;
+    }
+
+    final newFlatIndex = groupPositionToFlatIndex(_groups, newGroup, newCol);
+    if (newFlatIndex != _currentIndex) {
+      setState(() => _currentIndex = newFlatIndex);
+      _scrollToCurrentItem();
+      _preloadImagesAroundCurrent();
+    }
+  }
+
+  /// Get the thumbnail width based on actual aspect ratio from loaded thumbnails
+  double _getThumbnailWidth() {
+    // Find any loaded thumbnail to get the aspect ratio
+    for (final image in _images) {
+      final thumbnail = _thumbnailWorker.getThumbnail(image.file.path);
+      if (thumbnail != null) {
+        final aspectRatio = thumbnail.width / thumbnail.height;
+        return _thumbnailSize * aspectRatio;
+      }
+    }
+    // Fallback to square if no thumbnails loaded yet
+    return _thumbnailSize;
+  }
+
+  /// Scroll to make the current item visible in grid view
+  void _scrollToCurrentItem() {
+    if (_groups.isEmpty) return;
+
+    final (groupIndex, indexInGroup) = flatIndexToGroupPosition(
+      _groups,
+      _currentIndex,
+    );
+
+    // Scroll vertical list to show current group
+    final groupOffset =
+        groupIndex * (_thumbnailSize + _thumbnailSpacing + _groupHeaderHeight);
+    if (_verticalScrollController.hasClients) {
+      _verticalScrollController.animateTo(
+        groupOffset,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+
+    // Scroll horizontal list within group to show current image
+    final horizontalController = _groupScrollControllers[groupIndex];
+    if (horizontalController != null && horizontalController.hasClients) {
+      // Use actual thumbnail width based on aspect ratio
+      final thumbnailWidth = _getThumbnailWidth();
+      final itemOffset = indexInGroup * (thumbnailWidth + _thumbnailSpacing);
+      horizontalController.animateTo(
+        itemOffset,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -802,6 +1127,8 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
     setState(() {
       _images[_currentIndex].isNewGroup = !_images[_currentIndex].isNewGroup;
     });
+    // Rebuild groups since group boundaries changed
+    _rebuildGroups();
     _autoSave();
   }
 
@@ -829,6 +1156,16 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
       setState(() => _currentIndex = _currentIndex + 1 + nextUnreviewed);
       _preloadImagesAroundCurrent();
     }
+  }
+
+  /// Jump to the last group
+  void _jumpToLastGroup() {
+    if (_images.isEmpty || _groups.isEmpty) return;
+
+    final lastGroup = _groups.last;
+    setState(() => _currentIndex = lastGroup.startIndex);
+    _scrollToCurrentItem();
+    _preloadImagesAroundCurrent();
   }
 
   /// Jump to the resume point: the first unreviewed image after the last reviewed one.
@@ -929,20 +1266,33 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Keyboard Shortcuts',
+                    'Grid View (Default)',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  _buildControlRow('← / →', 'Navigate between images'),
-                  _buildControlRow('↑', 'Mark as Pick (stay on image)'),
-                  _buildControlRow('↓', 'Mark as Reject (stay on image)'),
-                  _buildControlRow('P', 'Mark as Pick (advance to next)'),
-                  _buildControlRow('X', 'Mark as Reject (advance to next)'),
+                  _buildControlRow('← / →', 'Move within group'),
+                  _buildControlRow('↑ / ↓', 'Move between groups'),
+                  _buildControlRow('P', 'Mark as Pick'),
+                  _buildControlRow('X', 'Mark as Reject'),
                   _buildControlRow('C', 'Clear status'),
-                  _buildControlRow('Y', 'Toggle fullscreen mode'),
+                  _buildControlRow('G', 'Add group marker'),
+                  _buildControlRow('Y', 'Enter fullscreen mode'),
                   _buildControlRow('H', 'Show this help'),
                   _buildControlRow('M', 'Show menu'),
                   _buildControlRow('ESC / Q', 'Exit application'),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Fullscreen View',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildControlRow('← / →', 'Navigate images'),
+                  _buildControlRow('↑', 'Mark as Pick (stay on image)'),
+                  _buildControlRow('↓', 'Mark as Reject (stay on image)'),
+                  _buildControlRow('G', 'Add group marker'),
+                  _buildControlRow('Y', 'Return to grid view'),
 
                   if (hasGamepad) ...[
                     const SizedBox(height: 16),
@@ -957,13 +1307,16 @@ class _ImagePickerScreenState extends State<ImagePickerScreen> {
                     ),
                     const SizedBox(height: 8),
                     _buildControlRow(
-                      'D-Pad Left/Right',
-                      'Navigate prev/next image',
+                      'D-Pad ← / →',
+                      'Grid: move in group / Full: prev/next',
                     ),
-                    _buildControlRow('D-Pad Down', 'Add group marker'),
                     _buildControlRow(
-                      'Left Stick (L/R)',
-                      'Navigate prev/next image',
+                      'D-Pad ↑ / ↓',
+                      'Grid: move between groups',
+                    ),
+                    _buildControlRow(
+                      'D-Pad ↓ (Fullscreen)',
+                      'Add group marker',
                     ),
                     _buildControlRow('A Button', 'Pick and advance'),
                     _buildControlRow('B Button', 'Close this dialog'),
